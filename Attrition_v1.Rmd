@@ -1,0 +1,3025 @@
+---
+title: "Attrition_220210"
+author: "Richard Smith"
+date: "2/3/2022"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+```{r warning=FALSE, message=FALSE, include=FALSE}
+library(tidyverse)
+library(tidyverse) # for data manipulation and plotting and so on
+library(nlraa) # for self-starting models
+library(minpack.lm)# alternative for nls model making
+library(broom)     # for getting model info in a tidy way
+library(modelr)    # for the r-squared and rmse
+library(nlstools)  # for Wald confidence intervals
+library(agridat)   # for the data
+library(sp) #spatial polygon creation for mapping
+library(sf) #simple feature creation for mapping
+library(rgdal) #readogr
+library(knitr)
+library(htmltools)
+library(plyr)
+library(stats)
+```
+
+
+```{r , include=FALSE}
+setwd("C:/Users/smit3581/Desktop/00_Disertation/Historic seed rate/Code/MarkDown")
+
+DF <- read.csv("PAC_Master220126_v7.csv")
+```
+
+
+```{r , include=FALSE}
+
+DF1 <- DF[DF$DataClass %in% c("A"), ] 
+
+tbl1<- table(DF1$SiteYear, DF1$DataClass)
+
+length(tbl1)
+
+tbl1
+
+#write.csv(tbl1, "C:/Users/smit3581/Desktop/00_Disertation/Historic seed rate/Attrition/SiteYearList.csv")
+
+```
+
+ 
+```{r FourSRa_plot function, include=FALSE}
+
+FourSRa_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 4) , rep("R8" , 4), rep("Seed Rate", 4)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 100000, 150000, 200000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 100000, 150000, 200000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FourSRa_table function, include=FALSE}
+
+FourSRa_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 4) , rep("R8" , 4), rep("Seed Rate", 4)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 100000, 150000, 200000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 100000, 150000, 200000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FourSRb_plot function, include=FALSE}
+
+FourSRb_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 4) , rep("R8" , 4), rep("Seed Rate", 4)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(59000, 110000, 170000, 230000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(59000, 110000, 170000, 230000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FourSRb_table function, include=FALSE}
+
+FourSRb_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 4) , rep("R8" , 4), rep("Seed Rate", 4)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(59000, 110000, 170000, 230000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(59000, 110000, 170000, 230000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRa_plot function, include=FALSE}
+
+FiveSRa_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRa_table function, include=FALSE}
+
+FiveSRa_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRb_plot function, include=FALSE}
+
+FiveSRb_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRb_table function, include=FALSE}
+
+FiveSRb_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRc_plot function, include=FALSE}
+
+FiveSRc_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(80000, 120000, 160000, 200000, 240000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(80000, 120000, 160000, 200000, 240000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRc_table function, include=FALSE}
+
+FiveSRc_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(80000, 120000, 160000, 200000, 240000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(80000, 120000, 160000, 200000, 240000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+
+```{r FiveSRd_plot function, include=FALSE}
+
+FiveSRd_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(69000, 101000, 150000, 204000, 240000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(69000, 101000, 150000, 204000, 240000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRd_table function, include=FALSE}
+
+FiveSRd_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(69000, 101000, 150000, 204000, 240000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(69000, 101000, 150000, 204000, 240000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+
+```{r FiveSRe_plot function, include=FALSE}
+
+FiveSRe_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRe_table function, include=FALSE}
+
+FiveSRe_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 5) , rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r SixSRa_plot function, include=FALSE}
+
+SixSRa_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 6) , rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r SixSRa_table function, include=FALSE}
+
+SixSRa_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 6) , rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r SixSRb_plot function, include=FALSE}
+
+SixSRb_plot <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 6) , rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 95000, 130000, 165000, 200000, 235000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 95000, 130000, 165000, 200000, 235000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r SixSRb_table function, include=FALSE}
+
+SixSRb_table <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac, # cut the data down to what you need
+              PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("A"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:4]
+
+sd2    <- DF2[, 5:7]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 6) , rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 95000, 130000, 165000, 200000, 235000), times = 3))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 95000, 130000, 165000, 200000, 235000), times = 3))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Emergence <- (DF2$PPe_mean/DF2$SR_mean)*100
+Survival  <- (DF2$PPl_mean/DF2$PPe_mean)*100
+Attrition <- ((DF2$PPe_mean - DF2$PPl_mean)/DF2$PPe_mean)*100
+
+DF2.2 <- cbind(DF2, Emergence, Survival, Attrition)
+DF2.3 <- DF2.2[ -c(4, 7) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Late stands (mean)", "Early stands (sd)", "Late stands (sd)", "Emergence (%)", "Survival (%)","Attrition (%)"), 
+              align = c("c", "c", "c", "c", "c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r SixSRa_plot_B function, include=FALSE}
+
+SixSRa_plot_B <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("B"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'V3'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'darkgreen'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r SixSRa_table_B function, include=FALSE}
+
+SixSRa_table_B <-function(x){
+
+  DF1 <- tibble(PPe = DF$Early_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("B"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPe, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("V3" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Early_Estab <- (DF2$PPe_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Early_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Early stands (mean)", "Early stands (sd)", "Emergence (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRa_plot_C function, include=FALSE}
+
+FiveSRa_plot_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRa_table_C function, include=FALSE}
+
+FiveSRa_table_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 100000, 150000, 200000, 250000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Late_Estab <- (DF2$PPl_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Late_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Late stands (mean)", "Late stands (sd)", "Late Establishment (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRb_plot_C function, include=FALSE}
+
+FiveSRb_plot_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRb_table_C function, include=FALSE}
+
+FiveSRb_table_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(55000, 110000, 165000, 220000, 275000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Late_Estab <- (DF2$PPl_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Late_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Late stands (mean)", "Late stands (sd)", "Late Establishment (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRg_plot_C function, include=FALSE}
+
+FiveSRg_plot_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(80900, 109400, 144800, 182400, 219500), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(80900, 109400, 144800, 182400, 219500), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRg_table_C function, include=FALSE}
+
+FiveSRg_table_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(80900, 109400, 144800, 182400, 219500), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(80900, 109400, 144800, 182400, 219500), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Late_Estab <- (DF2$PPl_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Late_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Late stands (mean)", "Late stands (sd)", "Late Establishment (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRh_plot_C function, include=FALSE}
+
+FiveSRh_plot_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(69000, 99000, 128000, 158000, 188000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(69000, 99000, 128000, 158000, 188000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRh_table_C function, include=FALSE}
+
+FiveSRh_table_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(69000, 99000, 128000, 158000, 188000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(69000, 99000, 128000, 158000, 188000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Late_Estab <- (DF2$PPl_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Late_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Late stands (mean)", "Late stands (sd)", "Late Establishment (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r FiveSRi_plot_C function, include=FALSE}
+
+FiveSRi_plot_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 110000, 160000, 210000, 260000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 110000, 160000, 210000, 260000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r FiveSRi_table_C function, include=FALSE}
+
+FiveSRi_table_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 5), rep("Seed Rate", 5)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 110000, 160000, 210000, 260000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 110000, 160000, 210000, 260000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Late_Estab <- (DF2$PPl_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Late_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Late stands (mean)", "Late stands (sd)", "Late Establishment (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r SixSRa_plot_C function, include=FALSE}
+
+SixSRa_plot_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r SixSRa_table_C function, include=FALSE}
+
+SixSRa_table_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(50000, 90000, 130000, 170000, 210000, 250000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Late_Estab <- (DF2$PPl_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Late_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Late stands (mean)", "Late stands (sd)", "Late Establishment (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+
+```{r SixSRc_plot_C function, include=FALSE}
+
+SixSRc_plot_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear)
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = C
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000, 260000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000, 260000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+#DF3$SR_Factor <- format(DF3$SR_Factor, scientific = FALSE)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+options(scipen=999)
+
+ggplot(DF3, aes(fill=Measure, y=mean, x=SR_Factor)) + 
+    geom_bar(position= position_dodge2(20), colour="black", stat="identity")+
+  scale_x_discrete(limits = levels(DF3$SR_Factor))+
+  scale_y_continuous(breaks = seq(0, 300000, by = 25000))+
+  theme_minimal() + 
+  labs(x='Planted seeds (Ac)', y='Seeds or plants (Ac)', title='Optimizing Seed Rate') +
+  theme(plot.title = element_text(hjust=0.5, size=20, face='bold')) +
+  scale_fill_manual('Measured', values=c('black', 'tan'))+
+  geom_errorbar(aes(ymin= mean - sd, ymax= mean + sd), position = position_dodge(.9), width=.2)
+
+
+
+}
+
+
+
+```
+
+```{r SixSRc_table_C function, include=FALSE}
+
+SixSRc_table_C <-function(x){
+
+  DF1 <- tibble(PPl = DF$Late_Ac,
+               SR = DF$SR_Ac,
+               SR_F = DF$SR_Ac,
+               Cl = DF$DataClass,
+               SY = DF$SiteYear) # cut the data down to what you need
+              
+  
+DF1 <- DF1[DF1$SY %in% c(x), ] # sorting the larger dataset into only desired siteyear
+
+DF1 <- DF1[DF1$Cl %in% c("C"), ] # make sure that DataClass = A
+
+
+DF1 <- na.omit(DF1) #remove any rows containing na
+
+DF2 <-DF1 %>% group_by(SR_F) %>% summarise_at(vars(PPl, SR), funs(mean, sd))
+
+
+means2 <- DF2[, 2:3]
+
+sd2    <- DF2[, 4:5]
+
+
+
+
+means3 <- data.frame(a=unlist(means2, use.names = T))
+colnames(means3) <- c("mean") #change the column name
+
+sd3    <- data.frame(a=unlist(sd2, use.names = T))
+colnames(sd3) <- c("sd") #change the column name
+
+
+Measure <- data.frame(c(rep("R8" , 6), rep("Seed Rate", 6)))
+colnames(Measure) <- c("Measure") #change the column name
+
+
+SR_Factor <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000, 260000), times = 2))
+colnames(SR_Factor) <- c("SR_Factor") #change the column name
+
+SR_Num <- data.frame(rep(c(60000, 100000, 140000, 180000, 220000, 260000), times = 2))
+colnames(SR_Num) <- c("SR_Numeric") #change the column name
+
+
+DF3 <- data.frame(Measure, SR_Factor, SR_Num, means3, sd3)
+
+DF3$SR_Factor <- as.factor(DF3$SR_Factor)
+DF3$SR_Numeric <- as.numeric(DF3$SR_Factor)
+
+DF3$Measure <- factor(DF3$Measure, levels = c('Seed Rate', 'R8'))
+
+# Make a table for crop emergence and plant survival
+Late_Estab <- (DF2$PPl_mean/DF2$SR_mean)*100
+
+DF2.2 <- cbind(DF2, Late_Estab)
+DF2.3 <- DF2.2[ -c(3, 5) ]
+
+
+knitr::kable(DF2.3, "pipe",
+              col.name = c("Seed rate", "Late stands (mean)", "Late stands (sd)", "Late Establishment (%)"), 
+              align = c("c", "c", "c", "c"),
+              caption = "Summary for site-year" ,
+             digits = 0)
+
+
+}
+
+```
+
+# DPAC
+
+## 2010
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table("DPAC10")
+SixSRa_plot("DPAC10")
+
+```
+
+## 2011
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRb_table_C("DPAC11")
+FiveSRb_plot_C("DPAC11")
+
+```
+
+## 2012
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRb_table("DPAC12")
+FiveSRb_plot("DPAC12")
+
+```
+
+## 2013
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRb_table("DPAC13")
+FiveSRb_plot("DPAC13")
+
+```
+
+## 2014
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table_C("DPAC14")
+FiveSRa_plot_C("DPAC14")
+
+```
+
+## 2016
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("DPAC16")
+FiveSRa_plot("DPAC16")
+
+```
+
+
+## 2020
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+
+FiveSRa_table("DPAC20")
+FiveSRa_plot("DPAC20")
+
+
+```
+
+## 2021
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("DPAC21")
+FiveSRa_plot("DPAC21")
+
+```
+
+# NEPAC
+## 2010
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_B("NEPAC10")
+SixSRa_plot_B("NEPAC10")
+
+```
+
+## 2012
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table("NEPAC12")
+SixSRa_plot("NEPAC12")
+
+```
+
+## 2014
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_C("NEPAC14")
+SixSRa_plot_C("NEPAC14")
+
+```
+
+## 2015
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_C("NEPAC15")
+SixSRa_plot_C("NEPAC15")
+
+```
+
+## 2016
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("NEPAC16")
+FiveSRa_plot("NEPAC16")
+
+```
+
+## 2019
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FourSRa_table("NEPAC19")
+FourSRa_plot("NEPAC19")
+
+```
+
+## 2021
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FourSRa_table("NEPAC21")
+FourSRa_plot("NEPAC21")
+
+```
+
+# PPAC
+
+## 2011
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRd_table("PPAC11")
+FiveSRd_plot("PPAC11")
+
+```
+
+## 2012
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_C("PPAC12")
+SixSRa_plot_C("PPAC12")
+
+```
+
+## 2013
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_C("PPAC13")
+SixSRa_plot_C("PPAC13")
+
+```
+
+## 2014
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_C("PPAC14")
+SixSRa_plot_C("PPAC14")
+
+```
+
+## 2015
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table("PPAC15")
+SixSRa_plot("PPAC15")
+
+```
+
+## 2016
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table("PPAC16")
+SixSRa_plot("PPAC16")
+
+```
+
+## 2018
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("PPAC18")
+FiveSRa_plot("PPAC18")
+
+```
+
+## 2019
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("PPAC19")
+FiveSRa_plot("PPAC19")
+
+```
+
+## 2021
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("PPAC21")
+FiveSRa_plot("PPAC21")
+
+```
+
+# SEPAC
+
+## 2010
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRh_table_C("SEPAC10")
+FiveSRh_plot_C("SEPAC10")
+
+```
+
+## 2011
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("SEPAC11")
+FiveSRa_plot("SEPAC11")
+
+```
+
+## 2012
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("SEPAC12")
+FiveSRa_plot("SEPAC12")
+
+```
+
+## 2013
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table_C("SEPAC13")
+FiveSRa_plot_C("SEPAC13")
+
+```
+
+## 2014
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("SEPAC14")
+FiveSRa_plot("SEPAC14")
+
+```
+
+## 2015
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table_C("SEPAC15")
+FiveSRa_plot_C("SEPAC15")
+
+```
+
+## 2016-T6
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table_C("SEPAC16T6")
+FiveSRa_plot_C("SEPAC16T6")
+
+```
+
+## 2017
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("SEPAC17")
+FiveSRa_plot("SEPAC17")
+
+```
+
+## 2018
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table_C("SEPAC18")
+FiveSRa_plot_C("SEPAC18")
+
+```
+
+## 2019
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("DPAC21")
+FiveSRa_plot("DPAC21")
+
+```
+
+## 2020
+## 2021
+
+
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("SEPAC21")
+FiveSRa_plot("SEPAC21")
+
+```
+
+# Meigs
+
+## 2011
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRg_table_C("Meigs11")
+FiveSRg_plot_C("Meigs11")
+
+```
+
+## 2012
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table("Meigs12")
+SixSRa_plot("Meigs12")
+
+```
+
+
+## 2013
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_C("Meigs13")
+SixSRa_plot_C("Meigs13")
+
+```
+
+## 2018
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("Meigs18")
+FiveSRa_plot("Meigs18")
+
+```
+
+## 2019
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("Meigs19")
+FiveSRa_plot("Meigs19")
+
+```
+
+## 2020
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FourSRb_table("Meigs20")
+FourSRb_plot("Meigs20")
+
+```
+
+## 2021
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRa_table("Meigs21")
+FiveSRa_plot("Meigs21")
+
+```
+
+# ACRE
+
+
+
+## 2018
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRc_table("ACRE18")
+FiveSRc_plot("ACRE18")
+
+```
+
+## 2019
+
+## 2020
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRc_table("ACRE20")
+FiveSRc_plot("ACRE20")
+
+```
+
+# Krom
+
+## 2010
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRa_table_C("Krom10")
+SixSRa_plot_C("Krom10")
+
+```
+
+## 2012
+
+# Meador
+
+## 2010
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRb_table("Meador10")
+FiveSRb_plot("Meador10")
+
+```
+
+## 2011
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRc_table_C("Meador11")
+SixSRc_plot_C("Meador11")
+
+```
+
+## 2012
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+FiveSRe_table("Meador12")
+FiveSRe_plot("Meador12")
+
+```
+
+# Guy
+
+## 2012
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+SixSRb_table("Guy12")
+SixSRb_plot("Guy12")
+
+```
+
+# Krom
+## 2011
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+
+FiveSRi_table_C("KromMuck11")
+FiveSRi_plot_C("KromMuck11")
+
+```
+
+## 2012
+
+```{r  ,echo=FALSE, warning=FALSE, message=FALSE}
+
+
+FiveSRa_table("Krom12")
+FiveSRa_plot("Krom12")
+
+```
+
+
+
+
