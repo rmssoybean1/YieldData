@@ -2,7 +2,6 @@
 setwd("")
 data <- read.csv("C:/Users/smit3581/Desktop/00_Disertation/Historic seed rate/Casteel/Meeting220215_YieldLevel/CountyAvgYield_v1.csv")
 
-
 CoAvg <- data.frame(data$Yield) 
 Year <- data.frame(data$Year)
 Loc  <- data.frame(data$County)
